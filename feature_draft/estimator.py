@@ -1,6 +1,7 @@
 import lightgbm as lgbm
 import pandas as pd
 from sklearn import metrics
+import xgboost as xgb
 
 
 class BaseEstimator:
@@ -49,19 +50,30 @@ class BaseEstimator:
         else:
             self._metric = metric
 
-    # TODO: implement skeleton fit method to reduce repeated code
     def fit(
         self,
         X: pd.DataFrame,
         y: pd.Series,
         X_val: pd.DataFrame = None,
-        y_val: pd.Series = None
+        y_val: pd.Series = None,
+        **kwargs,
     ):
-        pass
+        self.estimator.fit(
+            X=X,
+            y=y,
+            eval_set=[(X_val, y_val)],
+            **kwargs,
+        )
 
-    # TODO: implement skeleton predict method to reduce repeated code
     def predict(self, X: pd.DataFrame):
-        return None
+
+        if hasattr(self.estimator, "predict_proba"):
+            # TODO: Update so works for multi-class classification
+            predictions = self.estimator.predict_proba(X)[:, 1]
+        else:
+            predictions = self.estimator.predict(X)
+
+        return predictions
 
     def evaluate(self, y_true, y_pred):
         return self.metric(y_true, y_pred)
@@ -96,28 +108,38 @@ class LightGBMEstimator(BaseEstimator):
         X: pd.DataFrame,
         y: pd.Series,
         X_val: pd.DataFrame = None,
-        y_val: pd.Series = None
+        y_val: pd.Series = None,
     ):
 
-        # TODO: remove hard coded early stopping value into config file
-        self.estimator.fit(
+        callbacks = [lgbm.early_stopping(10, verbose=0)]
+
+        super().fit(
             X=X,
             y=y,
-            eval_set=[(X_val, y_val)],
-            callbacks=[
-                lgbm.early_stopping(10, verbose=0),
-            ],
+            X_val=X_val,
+            y_val=y_val,
+            callbacks=callbacks,
         )
 
-    def predict(self, X: pd.DataFrame):
 
-        if isinstance(self.estimator, lgbm.LGBMClassifier):
-            # TODO: Update so works for multi-class classification
-            predictions = self.estimator.predict_proba(X)[:, 1]
-        else:
-            predictions = self.estimator.predict(X)
+class XGBoostEstimator(BaseEstimator):
+    """XGBoost implementation for FeatureDraft."""
 
-        return predictions
+    _estimator_config = {
+        xgb.XGBClassifier: [metrics.roc_auc_score],
+        xgb.XGBRegressor: [metrics.mean_squared_error]
+    }
+
+    _train_method = "fit"
+
+    def __init__(self, estimator, **kwargs):
+        super().__init__(estimator=estimator)
+        self._set_early_stopping()
+
+    def _set_early_stopping(self):
+
+        if self.estimator.get_params()["early_stopping_rounds"] is None:
+            self.estimator.set_params(early_stopping_rounds=10)
 
 
 def build_estimator(model):
@@ -128,13 +150,14 @@ def build_estimator(model):
     """
 
     # TODO: change from hard-coded classes
-    for estimator_class in [BaseEstimator, LightGBMEstimator]:
+    for estimator_class in [
+        BaseEstimator,
+        LightGBMEstimator,
+        XGBoostEstimator,
+    ]:
         if type(model) in estimator_class._estimator_config.keys():
             return estimator_class(estimator=model)
 
     raise TypeError(
         f"model type {type(model)} is not compatible with feature_draft"
     )
-
-
-# TODO: Code XGBoost Estimator
