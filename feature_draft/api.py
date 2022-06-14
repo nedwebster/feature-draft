@@ -24,6 +24,7 @@ class FeatureDraft:
         self.estimator = estimator.build_estimator(model)
         self.cross_validator = cross_val.CrossValidator(
             n_splits=cross_val_splits,
+            stratified=self.estimator.is_classification(),
         )
         self.data = data
         self.response = response

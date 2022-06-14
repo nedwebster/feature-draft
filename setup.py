@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="feature_draft",
-    version="0.1.0",
+    version="0.1.1",
     author="Ned Webster",
     author_email="edwardpwebster@gmail.com",
     description="Feature Selection Algorithm",
