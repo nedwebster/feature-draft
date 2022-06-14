@@ -145,6 +145,22 @@ class XGBoostEstimator(BaseEstimator):
         if self.estimator.get_params()["early_stopping_rounds"] is None:
             self.estimator.set_params(early_stopping_rounds=10)
 
+    def fit(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        X_val: pd.DataFrame = None,
+        y_val: pd.Series = None,
+    ):
+
+        super().fit(
+            X=X,
+            y=y,
+            X_val=X_val,
+            y_val=y_val,
+            verbose=False,
+        )
+
 
 def build_estimator(model):
     """
