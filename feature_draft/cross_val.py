@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import KFold, StratifiedKFold
 
 from feature_draft import estimator
 
@@ -7,12 +7,22 @@ from feature_draft import estimator
 class CrossValidator:
     """Class to perform cross validation model builds"""
 
-    def __init__(self, n_splits: int = 5):
+    def __init__(self, n_splits: int = 5, stratified=True):
 
         self.n_splits = n_splits
 
-        # TODO: Add more fold options
-        self.fold_object = StratifiedKFold(n_splits=n_splits)
+        self._set_fold_object(stratified=stratified, n_splits=n_splits)
+
+    def _set_fold_object(self, stratified, n_splits):
+        """
+        Set KFold type. Regression models require a non-stratified approach.
+
+        """
+
+        if stratified:
+            self.fold_object = StratifiedKFold(n_splits=n_splits)
+        else:
+            self.fold_object = KFold(n_splits=n_splits)
 
     def cross_validation_build(
         self,

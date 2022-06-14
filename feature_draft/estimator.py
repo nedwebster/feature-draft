@@ -50,6 +50,10 @@ class BaseEstimator:
         else:
             self._metric = metric
 
+    # TODO: Refine the approach as it is a bit hacky
+    def is_classification(self):
+        return hasattr(self.estimator, "predict_proba")
+
     def fit(
         self,
         X: pd.DataFrame,
