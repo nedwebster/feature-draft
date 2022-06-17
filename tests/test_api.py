@@ -39,23 +39,6 @@ class TestFeatureDraft:
             LightGBMEstimator,
         )
 
-    def test_get_metric_direction(
-        self,
-        lgbm_classification_model,
-        classification_data,
-    ):
-
-        feature_draft = FeatureDraft(
-            model=lgbm_classification_model,
-            data=classification_data,
-            features=["a"],
-            response="b",
-        )
-
-        output = feature_draft._get_metric_direction()
-
-        assert output == max
-
     def test_get_baseline_metric(
         self,
         lgbm_classification_model,
