@@ -1,14 +1,10 @@
-from numbers import Number
-import operator
 from typing import List
 
 import pandas as pd
 import numpy as np
-from scipy import stats
 from sigfig import round
 
-from feature_draft import estimator, cross_val
-from feature_draft.configs.metrics_config import METRICS_CONFIG
+from feature_draft import estimator, cross_val, feature_scouter
 
 
 class FeatureDraft:
@@ -20,27 +16,24 @@ class FeatureDraft:
         features: List[str],
         response: str,
         cross_val_splits: int = 5,
+        alpha=0.05,
     ):
         self.estimator = estimator.build_estimator(model)
         self.cross_validator = cross_val.CrossValidator(
             n_splits=cross_val_splits,
+            stratified=self.estimator.is_classification(),
         )
+
+        self.scout = feature_scouter.Scout(
+            metric=self.estimator.metric,
+            alpha=alpha,
+        )
+
         self.data = data
         self.response = response
         self.candidate_features = features.copy()
         self.selected_features = []
         self.best_metrics = self._get_baseline_metric()
-        self.metric_direction = self._get_metric_direction()
-
-    # TODO: Move metric code to seprate metrics class
-    def _get_metric_direction(self):
-        """
-        Determine whether the estimator evaluation metric
-        is increasing or decreasing, and assign the appropriate
-        function.
-
-        """
-        return METRICS_CONFIG[self.estimator.metric]
 
     def _get_baseline_metric(self):
         """
@@ -74,37 +67,19 @@ class FeatureDraft:
             model=self.estimator,
         )
 
-    def _get_best_feature(self, feature_results: dict):
-        """Get the best feature from a dictionary of feature metrics"""
-
-        feature_means = {k: np.mean(v) for k, v in feature_results.items()}
-
-        return self.metric_direction(
-            feature_means.items(),
-            key=operator.itemgetter(1)
-        )[0]
-
-    # TODO: probably should move these checks outside of the FeatureDraft class
-    def _check_feature_versus_current(self, feature_results):
+    def _update_feature_lists(self, feature, feature_result):
         """
-        Evaluate metric improvement for the best feature. This compares
-        the metric results against the current saved best metrics.
-
+        Remove the selected feature from the list of candidates,
+        add it to the final selected list, and update the best metrics.
         """
 
-        # test average metric movement is an improvement
-        if self.metric_direction(
-            np.mean(self.best_metrics),
-            np.mean(feature_results),
-        ) != np.mean(feature_results):
-            return False
+        self.selected_features.append(feature)
+        self.candidate_features.remove(feature)
+        self.best_metrics = feature_result
 
-        # test difference is statistically significant
-        test_results = stats.ttest_ind(feature_results, self.best_metrics)
-        if test_results.pvalue < 0.05:
-            return True
-        else:
-            return False
+        # stop process if there are no more candidate features
+        if len(self.candidate_features) == 0:
+            self.metric_improving = False
 
     def draft_round(self):
         """
@@ -123,40 +98,12 @@ class FeatureDraft:
                 feature
             )
 
-        # identify the best feature from all candidate features
-        best_feature = self._get_best_feature(feature_results)
-
-        # check best_feature improves the model
-        is_improvement = self._check_feature_versus_current(
-            feature_results[best_feature]
+        output = self.scout.evaluate_results(
+            feature_results=feature_results,
+            current_results=self.best_metrics,
         )
 
-        if is_improvement:
-            return (best_feature, feature_results[best_feature])
-
-        else:
-            return None
-
-    def _update_feature_lists(self, feature, feature_result):
-        """
-        Remove the selected feature from the list of candidates,
-        add it to the final selected list, and update the best metrics.
-        """
-
-        self.selected_features.append(feature)
-        self.candidate_features.remove(feature)
-        self.best_metrics = feature_result
-
-        if len(self.candidate_features) == 0:
-            self.metric_improving = False
-
-    def _calcualte_metric_improvement(self, feature_result: List[Number]):
-
-        metric_improvement = (
-            np.mean(feature_result) - np.mean(self.best_metrics)
-        )
-
-        return metric_improvement
+        return output
 
     def draft_features(self):
 
@@ -170,27 +117,28 @@ class FeatureDraft:
             print(f"\nDraft Round: {i}")
 
             # run feature draft round
-            output = self.draft_round()
+            draft_results = self.draft_round()
 
             # end loop if no feature is selected
-            if output is None:
+            if draft_results is None:
                 self.metric_improving = False
 
             # update feature lists if feature is selected
             else:
-                metric_improvement = self._calcualte_metric_improvement(
-                    output[1]
+                metric_improvement = self.scout._get_metric_improvement(
+                    draft_results[1],
+                    self.best_metrics,
                 )
                 self._update_feature_lists(
-                    output[0],
-                    output[1],
+                    draft_results[0],
+                    draft_results[1],
                 )
 
                 # TODO: Move verbose printing from here
                 print(
-                    f"Feature Selected: {output[0]},"
+                    f"Feature Selected: {draft_results[0]},"
                     f"\nMetric Improvement: {round(metric_improvement, 5)}"
-                    f"\nNew Metric: {round(np.mean(output[1]), 5)}"
+                    f"\nNew Metric: {round(np.mean(draft_results[1]), 5)}"
                 )
                 i += 1
 

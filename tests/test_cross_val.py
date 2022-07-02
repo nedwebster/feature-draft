@@ -1,6 +1,7 @@
 import lightgbm as lgbm
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold
+import pytest
+from sklearn.model_selection import KFold, StratifiedKFold
 
 from feature_draft import cross_val, estimator
 
@@ -9,10 +10,21 @@ class TestCrossValidator:
 
     def test_instantiation(self):
 
-        test_cv = cross_val.CrossValidator(n_splits=3)
+        _ = cross_val.CrossValidator()
 
-        assert test_cv.n_splits == 3
-        assert isinstance(test_cv.fold_object, StratifiedKFold)
+    @pytest.mark.parametrize(
+        "stratified, kfold_type",
+        [
+            (True, StratifiedKFold),
+            (False, KFold),
+        ]
+    )
+    def test_set_fold_object(self, stratified, kfold_type):
+
+        test_cv = cross_val.CrossValidator(n_splits=3, stratified=stratified)
+
+        assert isinstance(test_cv.fold_object, kfold_type)
+        assert test_cv.fold_object.n_splits == 3
 
     def test_cross_validation_build(self, mocker):
 
